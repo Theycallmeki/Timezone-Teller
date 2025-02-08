@@ -1,106 +1,112 @@
 import os
 import requests
+from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
+from rapidfuzz import process
 
-# Load .env file for any environment variables
 load_dotenv()
 
-# Retrieve the API key from the .env file
 API_KEY = os.getenv("TIMEZONEDB_API_KEY")
 
-# Debugging step to ensure the API key is being loaded correctly
-print("Loaded API Key:", API_KEY)  # This should print the API key to verify it's loaded
+app = Flask(__name__)
+
+# Country-to-timezone mapping
+country_map = {
+    "japan": "Asia/Tokyo",
+    "usa": "America/New_York",
+    "uk": "Europe/London",
+    "india": "Asia/Kolkata",
+    "canada": "America/Toronto",
+    "australia": "Australia/Sydney",
+    "france": "Europe/Paris",
+    "germany": "Europe/Berlin",
+    "brazil": "America/Sao_Paulo",
+    "south africa": "Africa/Johannesburg",
+    "china": "Asia/Shanghai",
+    "russia": "Europe/Moscow",
+    "mexico": "America/Mexico_City",
+    "italy": "Europe/Rome",
+    "spain": "Europe/Madrid",
+    "netherlands": "Europe/Amsterdam",
+    "sweden": "Europe/Stockholm",
+    "argentina": "America/Argentina/Buenos_Aires",
+    "new zealand": "Pacific/Auckland",
+    "singapore": "Asia/Singapore",
+    "south korea": "Asia/Seoul",
+    "switzerland": "Europe/Zurich",
+    "philippines": "Asia/Manila"
+}
+
+from rapidfuzz import process, fuzz
+
+def get_best_match(country):
+    """Finds the closest matching country name using fuzzy matching."""
+    result = process.extractOne(country, country_map.keys(), scorer=fuzz.ratio)
+
+    if not result or len(result) < 2:  # Ensure result is valid and has at least two values
+        return None
+
+    match, score = result[:2]  # Extract only the first two values
+    return match if score > 80 else None  # Use a confidence threshold of 80%
+
 
 def get_time_in_country(country):
+    """Fetches the current time for a given country, correcting typos if needed."""
     try:
-        # Normalize the country name to lowercase
         country = country.lower().strip()
+        best_match = get_best_match(country)
 
-        # TimeZoneDB API needs a city or country, so we map country to a city
-        country_map = {
-            "japan": "Asia/Tokyo",
-            "usa": "America/New_York",
-            "uk": "Europe/London",
-            "india": "Asia/Kolkata",
-            "canada": "America/Toronto",
-            "australia": "Australia/Sydney",
-            "france": "Europe/Paris",
-            "germany": "Europe/Berlin",
-            "brazil": "America/Sao_Paulo",
-            "south africa": "Africa/Johannesburg",
-            "china": "Asia/Shanghai",
-            "russia": "Europe/Moscow",
-            "mexico": "America/Mexico_City",
-            "italy": "Europe/Rome",
-            "spain": "Europe/Madrid",
-            "netherlands": "Europe/Amsterdam",
-            "sweden": "Europe/Stockholm",
-            "argentina": "America/Argentina/Buenos_Aires",
-            "india": "Asia/Kolkata",
-            "new zealand": "Pacific/Auckland",
-            "singapore": "Asia/Singapore",
-            "south korea": "Asia/Seoul",
-            "switzerland": "Europe/Zurich",
-            "philippines": "Asia/Manila"
-        
-        }
+        if not best_match:
+            return f"Sorry, I couldn't recognize '{country}'. Please try again."
 
-        print(f"Looking up time for: {country}")
-        
-        if country not in country_map:
-            return f"Sorry, I don't have time data for {country}."
-
-        # Get the timezone for the country
-        timezone = country_map[country]
-        
-        # TimeZoneDB API request URL
+        timezone = country_map[best_match]
         url = f"http://api.timezonedb.com/v2.1/get-time-zone?key={API_KEY}&format=json&by=zone&zone={timezone}"
-        print(f"Making API request to: {url}")
-
-        # Make the API request
         response = requests.get(url)
 
         if response.status_code == 200:
             data = response.json()
             if data["status"] == "OK":
                 current_time = data["formatted"]
-                return f"The current time in {country.title()} is {current_time}."
+                return f"The current time in {best_match.title()} is {current_time}."
             else:
-                return f"Error fetching time for {country.title()}. Message: {data.get('message', 'Unknown error')}"
-        else:
-            return f"Error fetching time for {country.title()}. Status code: {response.status_code}"
+                return f"Error fetching time for {best_match.title()}. Message: {data.get('message', 'Unknown error')}"
+
+        return f"Error fetching time for {best_match.title()}. Status code: {response.status_code}"
 
     except Exception as e:
         return f"Error fetching time: {str(e)}"
 
 def generate_response(user_input):
+    """Provides chatbot responses and handles country requests."""
     responses = {
         "hello": "Hi! How can I assist you today?",
         "how are you": "I'm doing great, thank you! How about you?",
         "bye": "Goodbye! Have a great day!",
     }
+
+    user_input = user_input.lower().strip()
+
     for key in responses:
-        if key in user_input.lower():
+        if key in user_input:
             return responses[key]
-    return "I'm not sure how to respond to that. Can you try again?"
 
-def chat_with_ai():
-    print("AI Chatbot: Type 'exit' to end the chat.")
-    while True:
-        user_input = input("You: ")
-        if user_input.lower() == "exit":
-            print("Chatbot: Goodbye!")
-            break
+    return get_time_in_country(user_input)
 
-        # Get time response based on country
-        time_response = get_time_in_country(user_input)
-        print(f"Time response: {time_response}")
+@app.route("/")
+def index():
+    return render_template("index.html")
 
-        if "current time" in time_response:
-            print(f"Chatbot: {time_response}")
-        else:
-            chatbot_response = generate_response(user_input)
-            print("Chatbot:", chatbot_response)
+@app.route("/chat", methods=["POST"])
+def chat():
+    """Handles chat interactions and returns responses."""
+    data = request.json
+    user_message = data.get("message", "").strip()
+
+    if not user_message:
+        return jsonify(response="Please enter a valid country or message.")
+
+    bot_response = generate_response(user_message)
+    return jsonify(response=bot_response)
 
 if __name__ == "__main__":
-    chat_with_ai()
+    app.run(debug=True)

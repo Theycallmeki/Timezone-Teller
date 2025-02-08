@@ -3,70 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Chatbot - Time Zone</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f0f8ff;
-            text-align: center;
-            padding: 20px;
-        }
-        h1 {
-            color: #2c3e50;
-        }
-        label {
-            font-size: 18px;
-            margin-bottom: 10px;
-        }
-        input[type="text"] {
-            padding: 10px;
-            font-size: 16px;
-            width: 250px;
-            margin-bottom: 10px;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            background-color: #3498db;
-            color: white;
-            border: none;
-            border-radius: 5px;
-        }
-        button:hover {
-            background-color: #2980b9;
-        }
-        .response {
-            margin-top: 20px;
-            font-size: 18px;
-            color: #34495e;
-        }
-    </style>
+    <title>Timebot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-
-    <h1>Welcome to the AI Chatbot</h1>
-    <p>Enter a country to get the current time.</p>
-
-    <!-- Form for input -->
-    <form method="POST">
-        <label for="country">Enter a country (e.g., Japan, USA, India):</label><br>
-        <input type="text" id="country" name="country" required><br><br>
-        <button type="submit">Get Time</button>
-    </form>
-
-    <!-- Display responses -->
-    {% if time_response %}
-    <div class="response">
-        <h2>{{ time_response }}</h2>
+    <h1>Timebot</h1>
+    <div id="chat-container">
+        <div id="chatbox">
+            <p id="placeholder-message" style="color: gray; text-align: center;">Type a country to get the time</p>
+        </div>
+        <input type="text" id="user-input" placeholder="Type a country or message...">
+        <button id="send-btn">Send</button>
     </div>
-    {% endif %}
 
-    {% if chatbot_response %}
-    <div class="response">
-        <h3>Chatbot: {{ chatbot_response }}</h3>
-    </div>
-    {% endif %}
+    <script>
+        document.getElementById("send-btn").addEventListener("click", function() {
+            let userInput = document.getElementById("user-input").value;
+            if (userInput.trim() === "") return;
 
+            let chatbox = document.getElementById("chatbox");
+            let placeholder = document.getElementById("placeholder-message");
+
+            if (placeholder) {
+                placeholder.remove(); // Remove placeholder when user sends a message
+            }
+
+            chatbox.innerHTML += `<p class="message user-message"><strong>You:</strong> ${userInput}</p>`;
+            document.getElementById("user-input").value = "";
+
+            fetch("/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: userInput })
+            })
+            .then(response => response.json())
+            .then(data => {
+                chatbox.innerHTML += `<p class="message bot-message"><strong>Timebot:</strong> ${data.response}</p>`;
+                chatbox.scrollTop = chatbox.scrollHeight;
+            });
+        });
+
+        // Allow pressing Enter to send messages
+        document.getElementById("user-input").addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                document.getElementById("send-btn").click();
+            }
+        });
+    </script>
 </body>
 </html>
